@@ -191,6 +191,7 @@ class BatchProcessor(Generic[Telemetry]):
     def emit(self, data: Telemetry) -> None:
         if self._shutdown:
             _logger.info("Shutdown called, ignoring %s.", self._exporting)
+            self._metrics.drop_shutdown_items(1)
             return
         if self._pid != os.getpid():
             self._bsp_reset_once.do_once(self._at_fork_reinit)

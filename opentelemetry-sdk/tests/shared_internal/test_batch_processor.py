@@ -12,7 +12,7 @@ import unittest
 import weakref
 from platform import system
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -28,6 +28,11 @@ from opentelemetry.sdk._logs.export import (
 from opentelemetry.sdk._shared_internal import (
     DuplicateFilter,
 )
+from opentelemetry.sdk.environment_variables import (
+    OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED,
+)
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
@@ -140,6 +145,35 @@ class TestBatchProcessor:
         # This should not be flushed.
         batch_processor._batch_processor.emit(telemetry)
         exporter.export.assert_called_once()
+
+    @patch.dict(
+        "os.environ", {OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED: "true"}
+    )
+    def test_metrics_already_shutdown(self, batch_processor_class, telemetry):
+        metric_reader = InMemoryMetricReader()
+        meter_provider = MeterProvider(metric_readers=[metric_reader])
+        exporter = Mock()
+        batch_processor = batch_processor_class(
+            exporter, meter_provider=meter_provider
+        )
+        batch_processor.shutdown()
+
+        # Emitted after shutdown, so dropped and counted as already_shutdown.
+        batch_processor._batch_processor.emit(telemetry)
+
+        metrics = (
+            metric_reader.get_metrics_data()
+            .resource_metrics[0]
+            .scope_metrics[0]
+            .metrics
+        )
+        processed = next(m for m in metrics if m.name.endswith(".processed"))
+        data_points = processed.data.data_points
+        assert len(data_points) == 1
+        assert data_points[0].value == 1
+        assert (
+            data_points[0].attributes.get("error.type") == "already_shutdown"
+        )
 
     # pylint: disable=no-self-use
     def test_force_flush_flushes_telemetry(

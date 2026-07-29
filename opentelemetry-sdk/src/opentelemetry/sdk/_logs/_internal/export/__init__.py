@@ -233,6 +233,7 @@ class SimpleLogRecordProcessor(LogRecordProcessor):
         try:
             if self._shutdown:
                 _logger.warning("Processor is already shutdown, ignoring call")
+                self._metrics.drop_shutdown_items(1)
                 return
             # Convert ReadWriteLogRecord to ReadableLogRecord before exporting
             # Note: resource should not be None at this point as it's set during Logger.emit()

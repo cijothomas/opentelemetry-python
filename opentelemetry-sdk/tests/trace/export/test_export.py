@@ -189,6 +189,40 @@ class TestSimpleSpanProcessor(unittest.TestCase):
         )
         self.assertIsNone(processed_data_point0.attributes.get("error.type"))
 
+    @mock.patch.dict(
+        "os.environ", {OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED: "true"}
+    )
+    def test_metrics_already_shutdown(self):
+        metric_reader = InMemoryMetricReader()
+        meter_provider = MeterProvider(metric_readers=[metric_reader])
+        exporter = mock.MagicMock()
+        span_processor = export.SimpleSpanProcessor(
+            exporter, meter_provider=meter_provider
+        )
+        span_processor.shutdown()
+
+        span = mock.MagicMock()
+        span.context.trace_flags.sampled = True
+        span_processor.on_end(span)
+
+        exporter.export.assert_not_called()
+
+        metrics = (
+            metric_reader.get_metrics_data()
+            .resource_metrics[0]
+            .scope_metrics[0]
+            .metrics
+        )
+        processed = next(
+            m for m in metrics if m.name == "otel.sdk.processor.span.processed"
+        )
+        data_points = processed.data.data_points
+        self.assertEqual(len(data_points), 1)
+        self.assertEqual(data_points[0].value, 1)
+        self.assertEqual(
+            data_points[0].attributes.get("error.type"), "already_shutdown"
+        )
+
 
 # Many more test cases for the BatchSpanProcessor exist under
 # opentelemetry-sdk/tests/shared_internal/test_batch_processor.py.

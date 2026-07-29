@@ -33,6 +33,8 @@ class ProcessorMetricsT(Protocol):
 
     def drop_items(self, count: int) -> None: ...
 
+    def drop_shutdown_items(self, count: int) -> None: ...
+
     def finish_items(self, count: int) -> None: ...
 
 
@@ -41,6 +43,9 @@ class NoOpProcessorMetrics:
         pass
 
     def drop_items(self, count: int) -> None:
+        pass
+
+    def drop_shutdown_items(self, count: int) -> None:
         pass
 
     def finish_items(self, count: int) -> None:
@@ -71,6 +76,11 @@ class ProcessorMetrics:
         self._dropped_attrs = {
             **self._standard_attrs,
             ERROR_TYPE: "queue_full",
+        }
+
+        self._shutdown_attrs = {
+            **self._standard_attrs,
+            ERROR_TYPE: "already_shutdown",
         }
 
         if signal == "traces":
@@ -114,6 +124,9 @@ class ProcessorMetrics:
 
     def drop_items(self, count: int) -> None:
         self._processed.add(count, self._dropped_attrs)
+
+    def drop_shutdown_items(self, count: int) -> None:
+        self._processed.add(count, self._shutdown_attrs)
 
     def finish_items(self, count: int) -> None:
         self._processed.add(count, self._standard_attrs)
